@@ -15,3 +15,9 @@ Disclaimer
 ==========
 
 The implementation depends on dexmaker-1.1 (https://code.google.com/p/dexmaker/) to generate proxies that provide the ability to listen to Activity lifecycle events.
+
+The implementation has been tested on Gingerbread and found to work. Compatibility with older versions of Android will be a happy coincidence.
+
+As the implementation does depend on potentially vendor specific implementations of private framework classes, there is a possibility that this library will not work on some devices or devices and software combinations.
+
+This library should not be considered for production use.
