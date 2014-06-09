@@ -103,9 +103,9 @@ public class ActivityLifeCycleCallbackCompat
 
 	public ActivityLifeCycleCallbackCompat(Context aContext)
 	{
-		bindProxy();
-
 		System.setProperty("dexmaker.dexcache", aContext.getCacheDir().getAbsolutePath());
+
+		bindProxy();
 	}
 
 	private void bindProxy()
