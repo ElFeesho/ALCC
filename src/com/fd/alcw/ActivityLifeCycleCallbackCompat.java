@@ -4,8 +4,13 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.HashSet;
+import java.util.Set;
 
 import android.app.Activity;
+import android.content.Context;
+import android.os.Bundle;
+import android.util.Log;
 
 import com.google.dexmaker.stock.ProxyBuilder;
 
@@ -13,60 +18,94 @@ public class ActivityLifeCycleCallbackCompat
 {
 	public interface ActivityLifeCycleCallbackCompatListener
 	{
-		public void activityLifeCycleCallbackOnCreateWillBeCalled(Activity aActivity);
-		public void activityLifeCycleCallbackOnResumeWillBeCalled(Activity aActivity);
-		public void activityLifeCycleCallbackOnPauseWillBeCalled(Activity aActivity);
-		public void activityLifeCycleCallbackOnStartWillBeCalled(Activity aActivity);
-		public void activityLifeCycleCallbackOnStopWillBeCalled(Activity aActivity);
-		public void activityLifeCycleCallbackOnDestroyWillBeCalled(Activity aActivity);
+		public void onActivityCreated(Activity aActivity, Bundle savedInstanceState);
+
+		public void onActivityDestroyed(Activity aActivity);
+
+		public void onActivityPaused(Activity aActivity);
+
+		public void onActivitySaveInstanceState(Activity activity, Bundle outState);
+
+		public void onActivityResumed(Activity aActivity);
+
+		public void onActivityStarted(Activity aActivity);
+
+		public void onActivityStopped(Activity aActivity);
 	}
-	
-	private ActivityLifeCycleCallbackCompatListener mListener = null;
-	
+
+	private Set<ActivityLifeCycleCallbackCompatListener> mListeners = new HashSet<ActivityLifeCycleCallbackCompatListener>();
+
 	public class InstrumentationProxy implements java.lang.reflect.InvocationHandler
 	{
 		private Object mConcrete;
-		
+
 		public InstrumentationProxy(Object aActivityManager)
 		{
 			mConcrete = aActivityManager;
 		}
-		
+
 		@Override
 		public Object invoke(Object target, Method method, Object[] arguments) throws Throwable
 		{
-			if(method.getName().contentEquals("callActivityOnCreate"))
+			Log.d("ALCW", "Method: " + method.getName() + " args: " + arguments);
+			if (method.getName().contentEquals("callActivityOnCreate"))
 			{
-				mListener.activityLifeCycleCallbackOnCreateWillBeCalled((Activity) arguments[0]);
+				for (ActivityLifeCycleCallbackCompatListener listener : mListeners)
+				{
+					listener.onActivityCreated((Activity) arguments[0], (Bundle) arguments[1]);
+				}
 			}
-			else if(method.getName().contentEquals("callActivityOnPause"))
+			else if (method.getName().contentEquals("callActivityOnPause"))
 			{
-				mListener.activityLifeCycleCallbackOnPauseWillBeCalled((Activity) arguments[0]);
+				for (ActivityLifeCycleCallbackCompatListener listener : mListeners)
+				{
+					listener.onActivityPaused((Activity) arguments[0]);
+				}
 			}
-			else if(method.getName().contentEquals("callActivityOnStart"))
+			else if (method.getName().contentEquals("callActivityOnSaveInstanceState"))
 			{
-				mListener.activityLifeCycleCallbackOnStartWillBeCalled((Activity) arguments[0]);
+				for (ActivityLifeCycleCallbackCompatListener listener : mListeners)
+				{
+					listener.onActivitySaveInstanceState((Activity) arguments[0], (Bundle) arguments[1]);
+				}
 			}
-			else if(method.getName().contentEquals("callActivityOnStop"))
+			else if (method.getName().contentEquals("callActivityOnStart"))
 			{
-				mListener.activityLifeCycleCallbackOnStopWillBeCalled((Activity) arguments[0]);
+				for (ActivityLifeCycleCallbackCompatListener listener : mListeners)
+				{
+					listener.onActivityStarted((Activity) arguments[0]);
+				}
 			}
-			else if(method.getName().contentEquals("callActivityOnResume"))
+			else if (method.getName().contentEquals("callActivityOnStop"))
 			{
-				mListener.activityLifeCycleCallbackOnResumeWillBeCalled((Activity) arguments[0]);
+				for (ActivityLifeCycleCallbackCompatListener listener : mListeners)
+				{
+					listener.onActivityStopped((Activity) arguments[0]);
+				}
 			}
-			else if(method.getName().contentEquals("callActivityOnDestroy"))
+			else if (method.getName().contentEquals("callActivityOnResume"))
 			{
-				mListener.activityLifeCycleCallbackOnDestroyWillBeCalled((Activity) arguments[0]);
+				for (ActivityLifeCycleCallbackCompatListener listener : mListeners)
+				{
+					listener.onActivityResumed((Activity) arguments[0]);
+				}
+			}
+			else if (method.getName().contentEquals("callActivityOnDestroy"))
+			{
+				for (ActivityLifeCycleCallbackCompatListener listener : mListeners)
+				{
+					listener.onActivityDestroyed((Activity) arguments[0]);
+				}
 			}
 			return method.invoke(mConcrete, arguments);
 		}
 	}
-	
-	public ActivityLifeCycleCallbackCompat(ActivityLifeCycleCallbackCompatListener aListener)
+
+	public ActivityLifeCycleCallbackCompat(Context aContext)
 	{
-		mListener = aListener;
 		bindProxy();
+
+		System.setProperty("dexmaker.dexcache", aContext.getCacheDir().getAbsolutePath());
 	}
 
 	private void bindProxy()
@@ -74,21 +113,21 @@ public class ActivityLifeCycleCallbackCompat
 		try
 		{
 			ClassLoader classLoader = getClass().getClassLoader();
-			
+
 			Class<?> activityThreadClass = classLoader.loadClass("android.app.ActivityThread");
 			Class<?> instrumentationClass = getClass().getClassLoader().loadClass("android.app.Instrumentation");
-			
+
 			Method getCurrentActivityThread = activityThreadClass.getDeclaredMethod("currentActivityThread");
 			Object activityThreadInstance = getCurrentActivityThread.invoke(activityThreadClass);
-			
+
 			Field instrumentationField = activityThreadClass.getDeclaredField("mInstrumentation");
 			instrumentationField.setAccessible(true);
 			Object instrumentationInstance = instrumentationField.get(activityThreadInstance);
-			
+
 			ProxyBuilder<?> proxyClass = ProxyBuilder.forClass(instrumentationClass);
 
 			proxyClass.handler(new InstrumentationProxy(instrumentationInstance));
-			
+
 			Object newInstrumentationProxy = proxyClass.build();
 			instrumentationField.set(activityThreadInstance, newInstrumentationProxy);
 		}
@@ -123,6 +162,16 @@ public class ActivityLifeCycleCallbackCompat
 		catch (InvocationTargetException e)
 		{
 			e.printStackTrace();
-		}		
+		}
+	}
+
+	public void registerActivityLifeCycleCallbacks(ActivityLifeCycleCallbackCompatListener activityLifeCycleCallbackCompatListener)
+	{
+		mListeners.add(activityLifeCycleCallbackCompatListener);
+	}
+
+	public void unregisterActivityLifeCycleCallbacks(ActivityLifeCycleCallbackCompatListener activityLifeCycleCallbackCompatListener)
+	{
+		mListeners.remove(activityLifeCycleCallbackCompatListener);
 	}
 }
